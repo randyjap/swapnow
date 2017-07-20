@@ -1,3 +1,5 @@
+declare var $;
+
 export const timeFromNow = (date: string) : string => {
   let durationsInSeconds: object = {
     year: 31536000,
@@ -35,16 +37,16 @@ export const capitalize = (string: string) : string => {
   return string[0].toUpperCase() + string.slice(1).toLowerCase();
 }
 
-export const searchParams = (query: string, category: string) => {
-  let sort_by = "Posting Date";
-  let polarity = -1;
-  let page_idx = 1;
+export const searchParams = (query: string, category: string) : any => {
+  let sort_by : string = "Posting Date";
+  let polarity : number = -1;
+  let page_idx : number = 1;
 
   return {query, category, sort_by, polarity, page_idx};
 };
 
-export const getCategory = (location) => {
-  let category = location.pathname.slice(1);
+export const getCategory = (location: any) : string => {
+  let category : string = location.pathname.slice(1);
 
   if (category === "recent") {
       category = "All";
@@ -53,10 +55,18 @@ export const getCategory = (location) => {
       category = "Lost & Found";
     } else if (category === "coursematerial") {
       category = "Course Material";
+    } else if (category === "mycoursematerial") {
+      category = "My Course Material";
     } else {
       category = capitalize(category);
     }
   }
 
   return category;
+}
+
+export const deleteClickOutside = (id) => {
+  $(".ui-widget-overlay").click (function () {
+    $(id).dialog( "close" );
+  });
 }

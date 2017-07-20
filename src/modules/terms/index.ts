@@ -1,23 +1,17 @@
 import { connect } from 'react-redux';
+
 import Terms from './component';
+import { IUser } from 'common/interfaces';
 
 interface StateProps {
-  user: any;
-}
-
-interface DispatchProps {
-  onClick1: () => void;
+  user: IUser;
 }
 
 const mapStateToProps = (state: any, ownProp?: any): StateProps => ({
   user: state.user
 });
 
-const mapDispatchToProps = (dispatch: any): DispatchProps => ({
-  onClick1: () => { console.log("hi"); }
-});
-
 export default connect(
   mapStateToProps,
-  mapDispatchToProps
+  null
 )(Terms);

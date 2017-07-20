@@ -18,7 +18,6 @@ class Api::UsersController < ApplicationController
     else
       @user = User.new(fb_id: fb_id)
       if @user.save
-        @user.mail
         return render "api/users/show", status: 200
       else
         return render json: ["invalid token"], status: 401

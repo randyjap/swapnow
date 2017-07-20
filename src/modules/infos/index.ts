@@ -1,21 +1,15 @@
 import { connect } from 'react-redux';
+
 import Infos from './component';
+import { IUser } from 'common/interfaces';
 
 interface StateProps {
-  user: any;
+  user: IUser;
 }
-
-// interface DispatchProps {
-//   onClick1: () => void;
-// }
 
 const mapStateToProps = (state: any): StateProps => ({
   user: state.user
 });
-
-// const mapDispatchToProps = (dispatch: any): DispatchProps => ({
-//   onClick1: () => { console.log("hi"); }
-// });
 
 export default connect(
   mapStateToProps,

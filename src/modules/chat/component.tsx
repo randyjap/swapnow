@@ -1,26 +1,36 @@
-declare var Promise;
+declare var $, Promise;
+
 import React from 'react';
+import autosize from 'autosize';
 import * as firebase from 'firebase';
 import autoBind from 'react-autobind';
 import { keyBy, values } from 'lodash';
+import { hashHistory } from 'react-router';
 
+import { IUser, IChat } from 'common/interfaces';
+import { createConversation } from 'common/utils';
+import { LoadingSpinner } from 'common/components';
 import { Messages, ConversationItem } from './subcomponents';
-import { fetchConversations } from './utils';
 
 interface Props {
-  user: any;
+  user: IUser;
   location: {
     query: {
       id: string;
     }
-  }
+  };
+  chat: IChat;
+  fetchFirebaseConversations: any;
+  deleteConversation: any;
 }
 
 interface State {
   loading: boolean;
+  unreadMessage: boolean;
   message: string;
-  currentConversation: string;
   conversations: any;
+  currentConversation: string;
+  intervalId: any;
 }
 
 class Chat extends React.Component<Props, State> {
@@ -32,95 +42,68 @@ class Chat extends React.Component<Props, State> {
       loading: true,
       conversations: {},
       currentConversation: null,
-      message: ''
+      message: '',
+      unreadMessage: false,
+      intervalId: null
     }
 
     autoBind(this);
-
+    
     this.ref = null;
   }
 
-  componentDidMount() : void {
+  public componentDidMount() : void {
     let { user } = this.props;
-
     let conversationId = this.props.location.query.id;
+    let currentConversation = null;
 
-    fetchConversations(user.auth.accessToken).then(
-      res => {
+    if (conversationId) {
+      currentConversation = conversationId;
+    }
 
-        let currentConversation;
-
-        if (res.length === 0) {
-          this.setState({ loading: false });
-          return;
-        };
-
-        if (conversationId) {
-          currentConversation = res.filter(conversation => (
-            conversation.conversation_id === conversationId
-          ));
-
-          if (currentConversation.length === 0) {
-            currentConversation = res[0].conversation_id;
-          } else {
-            currentConversation = currentConversation[0].conversation_id;
-          }
-        } else {
-          currentConversation = res[0].conversation_id;
-        }
-
-        this.ref = firebase.database().ref(`conversations/${currentConversation}`); 
-
-        let conversations : object = keyBy<object>(res, "conversation_id");
-
-        let ids = Object.keys(conversations);
-
-        let dataNeeded = [];
-
-        for (let i = 0; i < ids.length; i++) {
-          
-          let data = firebase.database().ref(`conversations/${ids[i]}`).once('value', snapshot => {
-            
-            let messages = snapshot.val() || {};
-
-            conversations[ids[i]].messages = messages;
-
-            let timestamps = Object.keys(messages);
-
-            if (timestamps.length === 0) {
-              conversations[ids[i]].hasUnreadMessages = false;
-              return;
-            }
-            
-            let hasUnreadMessages = messages[timestamps[timestamps.length - 1]].sender !== user.userFB.id;
-
-            conversations[ids[i]].hasUnreadMessages = hasUnreadMessages;
-            
-          });
-
-          dataNeeded.push(data);
-        }
-
-        Promise.all(dataNeeded).then(() => {
-          this.setState({ 
-            currentConversation,
-            conversations, 
-            loading: false,
-          });
-        });
-      },
-      err => console.log(err)
-    );    
+    this.loadData();
+    let intervalId = setInterval((this.loadData), 300000);
+    this.setState({ intervalId, currentConversation });
   }
 
-  componentWillUnmount() : void {
+  private loadData() {
+    this.props.user && this.props.fetchFirebaseConversations(this.props.user);
+  }
+
+  public componentWillUnmount() : void {
+    clearInterval(this.state.intervalId);
     if (this.ref) this.ref.off();
   }
 
-  sendMessage(message : string) : void {
+  public componentWillReceiveProps(newProps) {
+    if (newProps.chat.conversations) {
+      let conversations = newProps.chat.conversations;
+      let unreadMessage = newProps.chat.unreadMessage;
+      let stateConversation = this.state.currentConversation;
+      let currentConversation;
+      
+      if (this.props.location.query.id) {
+        currentConversation = this.props.location.query.id;
+      } else if (!stateConversation || !Object.keys(conversations).includes(stateConversation)) {
+        currentConversation = Object.keys(conversations)[0];
+      } else {
+        currentConversation = stateConversation;
+      }
+
+      this.ref = firebase.database().ref(`conversations/${currentConversation}`); 
+
+      this.setState({
+        conversations,
+        currentConversation,
+        loading: false,
+        unreadMessage
+      });
+    }
+  }
+
+  public sendMessage(message : string) : void {
     let { currentConversation } = this.state;
     let { user } = this.props;
-
     let time = Date.now();
     let messageObj = {
       message,
@@ -143,16 +126,17 @@ class Chat extends React.Component<Props, State> {
       }
     });
 
+    createConversation(currentConversation, user.userFB.id);
     firebase.database().ref(`conversations/${currentConversation}/${time}`).set(messageObj);
   }
 
-  handleKeyPress(e) : void {
-    if (e.key === 'Enter') {
+  private handleKeyPress(e) : void {
+    if (e.key === 'Enter' && this.state.message !== "") {
       this.sendMessage(this.state.message);
     }
   }
 
-  update(e) : void {
+  private update(e) : void {
     if (e.target.value !== '\n') {
       this.setState({
         message: e.target.value
@@ -160,61 +144,68 @@ class Chat extends React.Component<Props, State> {
     }
   }
 
-  changeConversation(conversation_id) {
+  private changeConversation(conversation_id) {
+    hashHistory.push('messages');
     this.ref.off();
 
-    // connect to firebase and listens for messages
-    this.ref = firebase.database().ref(`conversations/${conversation_id}`); 
-    
-    this.ref.once('value', snapshot => {
+    firebase.database().ref(`conversations/${conversation_id}`).once('value', snapshot => {
       let messages = snapshot.val() || {};
 
-      this.setState({ 
+      Object.keys(messages).forEach(time => {
+        firebase.database().ref(`conversations/${conversation_id}/${time}/seen`).set(true);
+      });
+
+      this.setState({
         currentConversation: conversation_id,
         conversations: {
           ...this.state.conversations,
           [conversation_id]: {
             ...this.state.conversations[conversation_id],
-            messages: messages
+            hasUnreadMessages: false
           }
-        },
-        loading: false
-      }); 
-    });
+        }
+      });
+
+      this.props.fetchFirebaseConversations(this.props.user);
+    })
   }
 
-  render() : JSX.Element {
-    if (this.state.loading) {
-      return (
-        <div>Loading</div>
-      );
-    }
+  public render() : JSX.Element {    
+    if (this.state.loading) return <LoadingSpinner />
 
     let { currentConversation, conversations } = this.state;
-    let { user } = this.props;
+    let { user, chat } = this.props;
+    let width = window.innerWidth;    
 
+    autosize($('textarea'));
+  
     return (
-      <div className="container chat-container">
-        <div className="chat-conversations">
-          <div className='chat-conversations-title'>
-            Conversations
+      <div className={`container chat-container ${width <= 414 && 'mobile-chat-container'}`}>
+        <div className={`chat-conversations ${width <= 414 && 'mobile-conversations'}`}>
+          <div className={width > 414 ? 'chat-conversations-title' : 'hidden'}>
+            Messages
           </div>
-          { values(conversations).map((conversation : any) => (
+          {values(conversations).map((conversation : any) => (
             <ConversationItem
+              user={user}
+              chat={chat}
               key={conversation.conversation_id}
               hasUnreadMessages={conversation.hasUnreadMessages}
               active={currentConversation === conversation.conversation_id}
-              user={conversation.other_user_info}
+              otherUser={conversation.other_user_info}
               changeConversation={() => this.changeConversation(conversation.conversation_id)}
+              conversationId={conversation.conversation_id}
+              deleteConversation={this.props.deleteConversation}
             />
           ))}
         </div>
 
-        <div className="chat-messages">
-          { Object.keys(conversations).length === 0 ? (
-            <div>You don't have any conversations.</div>
+        <div className={`chat-messages ${width > 414 ? 'no-border-left' : 'no-border-top'}`}>
+          {Object.keys(conversations).length === 0 ? (
+            <div id="messages-warning">You don't have any conversations.</div>
           ) :(
             <Messages
+              conversations={conversations}
               conversation={conversations[currentConversation]}
               user={user}
             />
@@ -231,7 +222,7 @@ class Chat extends React.Component<Props, State> {
           </div>
         </div>
       </div>
-    );
+    )
   }
 }
 

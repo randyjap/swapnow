@@ -219,6 +219,10 @@ ul.nav {
 }
 
 /*Loader*/
+.loading-grid-list {
+  height: 50vh;
+}
+
 .showbox {
   position: absolute;
   top: 0;
@@ -238,6 +242,12 @@ ul.nav {
   content: '';
   display: block;
   padding-top: 100%;
+}
+
+@media screen and (max-width: 450px) {
+  .circular {
+    width: 30% !important;
+  }
 }
 
 .circular {
